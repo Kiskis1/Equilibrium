@@ -13,6 +13,7 @@ import {
   isEofReaperHitEligible,
   newEofReaperState,
   resolveEofSoulSplit,
+  type EofReaperState,
 } from "./eofPassives";
 
 describe("Shared Essence of Finality passive rules", () => {
@@ -33,11 +34,12 @@ describe("Shared Essence of Finality passive rules", () => {
     const one = advanceEofReaper({ state: zero, tick: 5, equipped: true, eligible: true, landed: true });
     expect(one).toEqual({ stacks: 1, expiresTick: 95 });
     expect(eofReaperBonus(one, 6)).toBeCloseTo(0.001, 10);
-    const capped = Array.from({ length: 40 }).reduce(
-      (s, _, i) => advanceEofReaper({
-        state: s, tick: i + 6, equipped: true, eligible: true, landed: true,
-      }), one,
-    );
+    let capped: EofReaperState = one;
+    for (let i = 0; i < 40; i++) {
+      capped = advanceEofReaper({
+        state: capped, tick: i + 6, equipped: true, eligible: true, landed: true,
+      });
+    }
     expect(capped.stacks).toBe(30);
     expect(eofReaperBonus(capped, 45)).toBeCloseTo(0.03, 10);
     const reset = advanceEofReaper({
