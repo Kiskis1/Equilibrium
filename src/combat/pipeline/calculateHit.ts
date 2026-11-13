@@ -500,3 +500,73 @@ export function calculateRawHitBand(input: RawHitBandInput): HitResult {
       : {}),
   };
 }
+
+/**
+ * A single concrete combat hit using the EXACT modifier, critical, Damage
+ * Potential and cap program used for the statistical hit distribution.
+ *
+ * The host owns the seeded RNG stream and supplies it explicitly. This
+ * function does not enumerate an expected hit band or consume the model's
+ * RNG during legality/preview queries. For an eligible non-guaranteed hit it
+ * draws critical chance first, then one inclusive integer damage roll,
+ * mirroring the established RS3 Combat Lab stream ordering.
+ */
+export interface RealizedHitInput extends HitInput {
+  readonly random: () => number;
+}
+
+export interface RealizedHit {
+  readonly damage: number;
+  readonly uncappedDamage: number;
+  readonly crit: boolean;
+  readonly rawRoll: number;
+  readonly potential: number;
+}
+
+export function sampleRealizedHit(input: RealizedHitInput): RealizedHit {
+  if (input.critDamageDistribution !== undefined) {
+    throw new RangeError(
+      "sampleRealizedHit: damage-only crit distributions require an explicit roll contract",
+    );
+  }
+  const context = resolvedHitContext(input);
+  const prepared = applyAbilityBaseModifiers(input.base, input.modifiers ?? [], context);
+  const { min, max } = rawHitBand({
+    ...input,
+    base: prepared.base,
+    modifiers: prepared.modifiers,
+  });
+  assertIntegerBandBounds(min, max);
+  const draw = (): number => {
+    const value = input.random();
+    if (!Number.isFinite(value) || value < 0 || value >= 1) {
+      throw new RangeError("sampleRealizedHit: RNG must produce values in [0, 1)");
+    }
+    return value;
+  };
+
+  // Even p=0 consumes its one crit roll on an eligible non-guaranteed hit.
+  // For guaranteed/disabled/DoT hits, the crit RNG draw is not needed.
+  const p = critProbability(input.crit);
+  const crit = input.crit.eligible === false || input.crit.disabled
+    ? false
+    : input.crit.guaranteed
+      ? true
+      : draw() < p;
+  const rawRoll = min + Math.floor(draw() * (max - min + 1));
+  const kits = compileHitPassKits(
+    { ...input, modifiers: prepared.modifiers },
+    crit,
+  );
+  const mult = crit ? baseCritDamageMultiplier(input.level, input.crit.damageBonus ?? 0) : null;
+  const active = activeFor(kits, mult);
+  const uncappedDamage = runPass(rawRoll, active, kits, false, mult);
+  const damage = runPass(rawRoll, active, kits, true, mult);
+  return {
+    damage,
+    uncappedDamage,
+    crit,
+    rawRoll,
+    potential: damagePotential(input.accuracy),
+  };
+}
