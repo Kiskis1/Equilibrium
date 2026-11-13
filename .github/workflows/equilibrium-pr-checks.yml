@@ -63,4 +63,4 @@ jobs:
       - name: TypeScript checks
         run: npx tsc --noEmit && npx tsc --noEmit -p tsconfig.tests.json
       - name: Combat simulation and shared pipeline regression tests
-        run: npx vitest run src/combat/engine src/combat/pipeline src/combat/core/realizedLifePoints.test.ts
+        run: npx vitest run src/combat/engine src/combat/pipeline src/combat/core/realizedLifePoints.test.ts src/combat/styles/necromancy/bloatRuntime.test.ts
