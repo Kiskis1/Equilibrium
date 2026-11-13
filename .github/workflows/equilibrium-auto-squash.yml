@@ -1,0 +1,43 @@
+name: Equilibrium verified PR automatic squash merge
+
+on:
+  workflow_run:
+    workflows: [Equilibrium PR safety checks]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: read
+  checks: read
+  statuses: read
+
+concurrency:
+  group: equilibrium-auto-squash-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  verified_squash:
+    if: >-
+      github.repository == 'Kiskis1/Equilibrium'
+      && github.event.workflow_run.event == 'pull_request'
+      && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout trusted main only
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Download provenance only from the completed CI run
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-identity
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: .ci-provenance
+      - name: Verify current PR checks and squash if safe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/equilibrium_auto_squash.py
