@@ -13,7 +13,7 @@ export function floorDamage(value: number): number {
 }
 
 export function mulFloor(value: number, factor: number): number {
-  return floorDamage(value * factor);
+  return Math.floor(value * factor);
 }
 
 export function percentFloor(value: number, percent: number): number {
