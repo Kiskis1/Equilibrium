@@ -16,7 +16,7 @@ export interface BloatDotState {
   readonly token: number;
   readonly damage: number;
   readonly potential: number;
-  readonly castId: number | null;
+  readonly castId?: number | null;
   readonly remaining: number;
   readonly nextTick: number;
   readonly spread: boolean;
@@ -82,7 +82,7 @@ export function newBloatDot(input: NewBloatDotInput): NewBloatDot {
       token: input.token,
       damage: input.damage,
       potential: input.potential,
-      castId: input.castId ?? null,
+      castId: input.castId,
       remaining: hits,
       nextTick: first,
       spread: input.spread ?? false,
