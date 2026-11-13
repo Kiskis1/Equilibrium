@@ -16,8 +16,11 @@ export interface EquippedAccessoryInputs {
 }
 
 export function isOccultistsRingEquipped(equipment: EquippedAccessoryInputs): boolean {
-  return equipment.equipmentSlots?.ring === OCCULTISTS_RING_ID ||
-    equipment.equipmentIds?.includes(OCCULTISTS_RING_ID) === true;
+  // An explicit worn ring slot overrides an obsolete/stashed equipmentIds list.
+  if (Object.hasOwn(equipment.equipmentSlots ?? {}, "ring")) {
+    return equipment.equipmentSlots?.ring === OCCULTISTS_RING_ID;
+  }
+  return equipment.equipmentIds?.includes(OCCULTISTS_RING_ID) === true;
 }
 
 export interface OccultistCastShape {
