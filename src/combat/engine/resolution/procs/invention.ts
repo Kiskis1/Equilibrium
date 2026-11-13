@@ -1,30 +1,16 @@
 import type { ScheduledEvent } from "../../runtime/events";
 import { scheduleEvent, type SimulationRuntime } from "../../runtime/runtime";
-import { secondsToTicks } from "../../../core/ticks";
-import { runPipeline } from "../../../pipeline/modifierPipeline";
-import { capabilitiesOf } from "../../../shared/damageProvenance";
 import {
-  AFTERSHOCK_DAMAGE_STEP_PER_RANK,
-  AFTERSHOCK_DAMAGE_THRESHOLD,
-  AFTERSHOCK_FORMULA_MAX_RANK,
-  AFTERSHOCK_MAX_AD_FRACTION_PER_RANK,
-  AFTERSHOCK_MIN_AD_FRACTION_PER_RANK,
-  AFTERSHOCK_MIN_PROC_INTERVAL_SECONDS,
-  CRACKLING_COOLDOWN_SECONDS,
-  CRACKLING_FORMULA_MAX_RANK,
-  cracklingDamageFraction,
-} from "../../../shared/perks";
+  AFTERSHOCK_DAMAGE_STEPS,
+  advanceInventionAfterLandedHit,
+  inventionRawDamageAtStep,
+} from "../../../shared/inventionRuntime";
+import { runPipeline } from "../../../pipeline/modifierPipeline";
 import type { ResolvedDamage } from "../types";
 import type { AttachedDamageComponent, EventResolution } from "../types";
 import { resolveLeagueAttachedTerms } from "../../../league/damage";
 import { resolveHostDamageInstance } from "../../../core/hostDamage";
 import { targetAndPostHitModifiers } from "../modifiers";
-
-function procRank(value: number | undefined, max: number): number {
-  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= max
-    ? value
-    : 0;
-}
 
 /** Crackling and Aftershock bypass Damage Potential and use only sourced target modifiers. */
 function applyProcModifiers(
@@ -107,7 +93,7 @@ function cracklingDamage(
   event: ScheduledEvent<SimulationRuntime>,
   rank: number,
 ): EventResolution {
-  const raw = Math.floor(rt.input.base * cracklingDamageFraction(rank));
+  const raw = inventionRawDamageAtStep("crackling", rank, rt.input.base);
   return procResolution(rt, event, "crackling", [raw], event.tick);
 }
 
@@ -117,121 +103,56 @@ function aftershockDamage(
   rank: number,
   atTick: number,
 ): EventResolution {
-  const hits: number[] = [];
-  const steps = Math.round(
-    (AFTERSHOCK_MAX_AD_FRACTION_PER_RANK - AFTERSHOCK_MIN_AD_FRACTION_PER_RANK) /
-      AFTERSHOCK_DAMAGE_STEP_PER_RANK,
+  const hits = Array.from(
+    { length: AFTERSHOCK_DAMAGE_STEPS + 1 },
+    (_, step) => inventionRawDamageAtStep("aftershock", rank, rt.input.base, step),
   );
-  const minimumUnits = Math.round(AFTERSHOCK_MIN_AD_FRACTION_PER_RANK * 1000);
-  const stepUnits = Math.round(AFTERSHOCK_DAMAGE_STEP_PER_RANK * 1000);
-  for (let step = 0; step <= steps; step++) {
-    const raw = Math.floor((rt.input.base * (minimumUnits + step * stepUnits) * rank) / 1000);
-    hits.push(raw);
-  }
   return procResolution(rt, event, "aftershock", hits, atTick);
 }
 
 /**
- * Aftershock charge eligibility (wiki: 50k threshold explosion;
- * https://runescape.wiki/w/Aftershock). Follows `canTriggerProcs` so conjure
- * auto/poison and equipment_proc do not charge; Aftershock's own blast never
- * re-charges (resets on land). Blessings never hit this path
- * (`recordResolved` skips Invention).
+ * Equilibrium's runtime uses summary distributions; an actual host sends a
+ * settled integer to the SAME shared transition. This wrapper only adapts
+ * scheduled closure events to the existing single-target simulation runtime.
+ * The pure transition owns the Invention rules for both consumers.
  */
-function contributesAftershockCharge(event: ScheduledEvent<SimulationRuntime>): boolean {
-  if (event.abilityId === "aftershock") return false;
-  return capabilitiesOf(event.provenance).canTriggerProcs;
-}
-
-/** Schedule Crackling/Aftershock after a land; mutates `rt.state.invention`. */
 export function applyInventionProcs(
   rt: SimulationRuntime,
   event: ScheduledEvent<SimulationRuntime>,
   damage: ResolvedDamage,
 ): void {
-  const cracklingRank = procRank(rt.input.procs?.cracklingRank, CRACKLING_FORMULA_MAX_RANK);
-  // Family hit|dot|command; also require canTriggerProcs (player_dot true, conjure auto false).
-  const cracklingEligible =
-    (event.family === "hit" || event.family === "dot" || event.family === "command") &&
-    capabilitiesOf(event.provenance).canTriggerProcs;
-  if (
-    cracklingRank > 0 &&
-    cracklingEligible &&
-    damage.max > 0 &&
-    event.tick >= rt.state.invention.cracklingReadyTick
-  ) {
-    const procResolution = cracklingDamage(rt, event, cracklingRank);
-    rt.state = {
-      ...rt.state,
-      invention: {
-        ...rt.state.invention,
-        cracklingReadyTick: event.tick + secondsToTicks(CRACKLING_COOLDOWN_SECONDS),
-      },
-    };
-    scheduleEvent(rt, {
+  const transition = advanceInventionAfterLandedHit({
+    state: rt.state.invention,
+    hit: {
       tick: event.tick,
+      targetId: "target",
+      abilityId: event.abilityId,
+      family: event.family,
+      provenance: event.provenance,
+      damage: { kind: "summary", min: damage.min, max: damage.max, expected: damage.expected },
+    },
+    ranks: {
+      cracklingRank: rt.input.procs?.cracklingRank,
+      aftershockRank: rt.input.procs?.aftershockRank,
+    },
+  });
+  rt.state = { ...rt.state, invention: transition.state };
+  for (const proc of transition.procs) {
+    const resolved = proc.kind === "crackling"
+      ? cracklingDamage(rt, event, proc.rank)
+      : aftershockDamage(rt, event, proc.rank, proc.tick);
+    scheduleEvent(rt, {
+      tick: proc.tick,
       family: "proc",
-      abilityId: "crackling",
+      abilityId: proc.kind,
       sourceCast: -1,
       hitIndex: 0,
       attached: false,
       procEligible: false,
       recursionAllowed: false,
       originKind: "proc",
-      provenance: { kind: "invention_proc", detail: "crackling" },
-      resolve: () => procResolution,
+      provenance: { kind: "invention_proc", detail: proc.kind },
+      resolve: () => resolved,
     });
   }
-
-  const aftershockRank = procRank(rt.input.procs?.aftershockRank, AFTERSHOCK_FORMULA_MAX_RANK);
-  if (aftershockRank === 0 || damage.expected <= 0) return;
-
-  const invention = rt.state.invention;
-  // Blast land: reset charge / pending / interval. Do not fall through into
-  // charge accumulation - Aftershock damage must not seed the next threshold.
-  if (event.abilityId === "aftershock") {
-    rt.state = {
-      ...rt.state,
-      invention: {
-        ...invention,
-        aftershockCharge: 0,
-        aftershockReadyTick: event.tick + secondsToTicks(AFTERSHOCK_MIN_PROC_INTERVAL_SECONDS),
-        aftershockPending: false,
-      },
-    };
-    return;
-  }
-
-  if (invention.aftershockPending) {
-    rt.state = { ...rt.state, invention };
-    return;
-  }
-
-  if (!contributesAftershockCharge(event)) return;
-
-  const aftershockCharge = invention.aftershockCharge + damage.expected;
-  if (aftershockCharge < AFTERSHOCK_DAMAGE_THRESHOLD) {
-    rt.state = { ...rt.state, invention: { ...invention, aftershockCharge } };
-    return;
-  }
-
-  const tick = Math.max(event.tick, invention.aftershockReadyTick);
-  const procResolution = aftershockDamage(rt, event, aftershockRank, tick);
-  rt.state = {
-    ...rt.state,
-    invention: { ...invention, aftershockCharge, aftershockPending: true },
-  };
-  scheduleEvent(rt, {
-    tick,
-    family: "proc",
-    abilityId: "aftershock",
-    sourceCast: -1,
-    hitIndex: 0,
-    attached: false,
-    procEligible: false,
-    recursionAllowed: false,
-    originKind: "proc",
-    provenance: { kind: "invention_proc", detail: "aftershock" },
-    resolve: () => procResolution,
-  });
 }
