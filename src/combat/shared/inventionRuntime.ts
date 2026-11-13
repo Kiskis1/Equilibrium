@@ -71,21 +71,22 @@ function rankOrZero(rank: number | undefined, max: number): number {
     : 0;
 }
 
-function damageForCharge(damage: InventionDamage): number {
+function damageForCharge(damage: InventionDamage): { charge: number; positiveMax: boolean } {
   if (damage.kind === "realized") {
     if (!Number.isSafeInteger(damage.integer) || damage.integer < 0) {
       throw new RangeError("Invention realized damage must be a non-negative safe integer");
     }
-    return damage.integer;
+    return { charge: damage.integer, positiveMax: damage.integer > 0 };
   }
-  if (
-    !Number.isFinite(damage.min) || !Number.isFinite(damage.max) ||
-    !Number.isFinite(damage.expected) || damage.min < 0 ||
-    damage.min > damage.expected || damage.expected > damage.max
-  ) {
-    throw new RangeError("Invention summary must have min <= expected <= max");
+  // The statistical runtime's ResolvedDamage is a support/analysis ledger.
+  // Its min/max/expected are not guaranteed to be ordered after attachments
+  // or other pipeline adjustments; preserve the original separate predicates:
+  // max > 0 for Crackling, expected > 0 for Aftershock charge.
+  if (!Number.isFinite(damage.min) || !Number.isFinite(damage.max) ||
+      !Number.isFinite(damage.expected)) {
+    throw new RangeError("Invention summary values must be finite");
   }
-  return damage.expected;
+  return { charge: damage.expected, positiveMax: damage.max > 0 };
 }
 
 /** Conjures add Aftershock charge, but do not gain other on-hit proc capability. */
@@ -109,7 +110,7 @@ export function advanceInventionAfterLandedHit(args: {
   if (!Number.isSafeInteger(hit.tick) || hit.tick < 0 || !hit.targetId) {
     throw new RangeError("Invention hit requires a non-negative integer tick and target ID");
   }
-  const damage = damageForCharge(hit.damage);
+  const { charge: damage, positiveMax } = damageForCharge(hit.damage);
   const cracklingRank = rankOrZero(ranks.cracklingRank, CRACKLING_FORMULA_MAX_RANK);
   const aftershockRank = rankOrZero(ranks.aftershockRank, AFTERSHOCK_FORMULA_MAX_RANK);
   const procs: InventionProcDescriptor[] = [];
@@ -117,7 +118,7 @@ export function advanceInventionAfterLandedHit(args: {
 
   const cracklingEligible = (hit.family === "hit" || hit.family === "dot" || hit.family === "command") &&
     capabilitiesOf(hit.provenance).canTriggerProcs;
-  if (cracklingRank > 0 && cracklingEligible && damage > 0 && hit.tick >= next.cracklingReadyTick) {
+  if (cracklingRank > 0 && cracklingEligible && positiveMax && hit.tick >= next.cracklingReadyTick) {
     next = { ...next, cracklingReadyTick: hit.tick + Math.round(CRACKLING_COOLDOWN_SECONDS * TICKS_PER_SECOND) };
     procs.push({
       kind: "crackling", tick: hit.tick, targetId: hit.targetId,
