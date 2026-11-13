@@ -15,6 +15,12 @@ import { secondsToTicks } from "../../../core/ticks";
 import { applyNecroOnCast, residualSoulCapFor } from "../../../styles/necromancy/effects";
 import { hasPassive } from "../../../shared/equipment";
 import { isBasicAttack } from "../../../shared/adrenalineGain";
+import {
+  isOccultistsRingEquipped,
+  occultistEligibleCast,
+  resolveOccultistInfliction,
+  OCCULTIST_INFLICTION_CHANCE,
+} from "../../../shared/accessoryPassives";
 import { rngProc } from "../../simulation/contracts";
 import { patchConjures, patchNecro, patchTarget } from "../../runtime/state";
 import {
@@ -47,6 +53,25 @@ export function applyNecromancyCastEffects(fx: CastEffectContext): void {
     rt.input.conjureDurationMult,
   );
   rt.state = patchNecro(rt.state, patch.necro);
+
+  // Infliction is once per committed damaging player cast (not each hit).
+  // Apply AFTER ordinary spend/gain so Finger of Death and Death Grasp can
+  // refund Necrosis stacks; do not roll when ring is not physically equipped.
+  const occultistEquipped = isOccultistsRingEquipped(rt.input);
+  const occultistEligible = occultistEligibleCast(ability);
+  if (occultistEquipped && occultistEligible) {
+    const activated = rt.stochastic.bernoulli(
+      "cast:occultist-infliction", OCCULTIST_INFLICTION_CHANCE,
+    );
+    const stacks = rt.state.necromancy.resources.necrosisStacks;
+    const infliction = resolveOccultistInfliction({
+      equipped: true, eligible: true, activated, necrosisStacks: stacks,
+    });
+    if (infliction.gained > 0) {
+      rt.state = patchNecro(rt.state, { necrosisStacks: infliction.necrosisStacks });
+    }
+  }
+
   if (patch.conjures) rt.state = patchConjures(rt.state, patch.conjures);
   resetCooldowns(fx, patch.clearCooldownIds);
 
