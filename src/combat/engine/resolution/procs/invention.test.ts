@@ -129,7 +129,7 @@ describe("Invention procs - Aftershock charge eligibility", () => {
     expect(rt.state.invention.aftershockCharge).toBe(0);
   });
 
-  it("does not charge Aftershock from conjure auto damage", () => {
+  it("charges Aftershock from conjured spirit damage without enabling their other procs", () => {
     const rt = createRuntime({
       ...baseInput,
       procs: { aftershockRank: 1 },
@@ -147,7 +147,22 @@ describe("Invention procs - Aftershock charge eligibility", () => {
       }),
       dmg,
     );
-    expect(rt.state.invention.aftershockCharge).toBe(0);
+    expect(rt.state.invention.aftershockCharge).toBe(5_000);
+
+    applyInventionProcs(
+      rt,
+      landEvent({
+        seq: 3,
+        family: "poison",
+        abilityId: "spirit_putrid_zombie_poison",
+        sourceCast: -1,
+        procEligible: false,
+        provenance: { kind: "conjure_poison" },
+        resolve: () => ({ damage: dmg }),
+      }),
+      dmg,
+    );
+    expect(rt.state.invention.aftershockCharge).toBe(10_000);
   });
 
   it("resets charge after a real threshold-crossing blast without keeping residual blast EV", () => {
