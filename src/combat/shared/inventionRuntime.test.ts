@@ -149,9 +149,14 @@ describe("shared Invention runtime", () => {
     expect(() => advanceInventionAfterLandedHit({
       state: state(), hit: hit(realized(1.5)), ranks,
     })).toThrow("safe integer");
+    // A statistical support ledger is not always an ordered min/mean/max band.
+    // Only finite values are required. Concrete damage still must be integer.
+    expect(advanceInventionAfterLandedHit({
+      state: state(), hit: hit(summary(100, 50, 40)), ranks: { aftershockRank: 1 },
+    }).state.aftershockCharge).toBe(50);
     expect(() => advanceInventionAfterLandedHit({
-      state: state(), hit: hit(summary(100, 50, 40)), ranks,
-    })).toThrow("summary");
+      state: state(), hit: hit(summary(100, Number.NaN, 40)), ranks,
+    })).toThrow("finite");
   });
 
   it("uses one externally supplied RNG draw for Aftershock, none for Crackling", () => {
