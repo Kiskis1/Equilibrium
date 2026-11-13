@@ -9,7 +9,7 @@ import {
 import { applyDamagePotential, damagePotential } from "../core/damagePotential";
 import { applyHitCap, normalizeHitCapRule, standardHitCap, type HitCapRule } from "../core/hitCaps";
 import { resolveHostDamageInstance } from "../core/hostDamage";
-import { floorDamage, mulFloor } from "../core/rounding";
+import { mulFloor } from "../core/rounding";
 import {
   contextWithProvenance,
   isTrueDotDamage,
@@ -170,7 +170,7 @@ function runPass(
     criticalDamageMultiplier == null
       ? kits.postDamagePotentialCritFlat
       : mulFloor(kits.postDamagePotentialCritFlat, criticalDamageMultiplier);
-  const resolved = floorDamage(scaled) + kits.postDamagePotentialFlat + inheritedCritFlat;
+  const resolved = Math.floor(scaled) + kits.postDamagePotentialFlat + inheritedCritFlat;
   return cap ? applyHitCap(resolved, kits.capRule) : resolved;
 }
 
