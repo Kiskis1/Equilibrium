@@ -1,5 +1,5 @@
 import { mulFloor } from "../core/rounding";
-import type { CombatModifier } from "../types";
+import type { CombatModifier, SourceReference } from "../types";
 
 /**
  * Ripper Demon passive: player damage rises from +0% at full target LP
@@ -11,6 +11,13 @@ import type { CombatModifier } from "../types";
  * combat host) decides whether a familiar is summoned/active, who is targeted,
  * and when damage events land. No RNG, HP changes or event scheduling.
  */
+export const RIPPER_DEMON_PASSIVE_SOURCE: SourceReference = {
+  source: "runescape-wiki",
+  url: "https://runescape.wiki/w/Ripper_Demon_(familiar)",
+  title: "Ripper Demon (familiar)",
+  verifiedAt: "2026-11-13",
+};
+
 export interface RipperDemonDamageInput {
   readonly targetLife: number;
   readonly targetMaxLife: number;
@@ -39,6 +46,7 @@ export function ripperDemonPassiveModifier(input: RipperDemonDamageInput): Comba
     id: "familiar:ripper-passive",
     stage: "ability",
     priority: 25,
+    source: RIPPER_DEMON_PASSIVE_SOURCE,
     applies: () => true,
     apply: state => ({ damage: mulFloor(state.damage, multiplier) }),
   };
