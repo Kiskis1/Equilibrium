@@ -11,6 +11,11 @@ import { noteAttachedTermsResolved } from "../../profiling/allocation";
 import { applyDeathMarkLanded } from "./landed/deathMark";
 import { scheduleInstabilityLightningSurge } from "./landed/magic";
 import { applyBotlgLanded } from "./botlg";
+import {
+  advanceEofReaper,
+  isEofEquipped,
+  isEofReaperHitEligible,
+} from "../../shared/eofPassives";
 
 /** Host or component band mean for a concrete Crit / No-crit outcome. */
 function branchExpected(
@@ -189,6 +194,21 @@ export function recordResolved(
   applyBotlgLanded(rt, event, landed);
 
   const { damage } = composed;
+  // The Reaper necklace component of EoF advances only on a landed personal
+  // hit; conjures, attached riders, poison and procs cannot seed stacks.
+  // This is the SAME pure transition consumed by the RS3 host adapter.
+  const reaperEquipped = isEofEquipped(rt.input);
+  if (reaperEquipped && !event.attached) {
+    const previous = rt.state.accessories.reaper;
+    const updated = advanceEofReaper({
+      state: previous, tick: event.tick, equipped: true,
+      eligible: isEofReaperHitEligible(event.provenance),
+      landed: damage.expected > 0,
+    });
+    if (updated !== previous) {
+      rt.state = { ...rt.state, accessories: { ...rt.state.accessories, reaper: updated } };
+    }
+  }
   if (!event.blessingId) applyInventionProcs(rt, event, damage);
 
   if (!event.attached && (event.family === "dot" || event.tearingThornsEligible === true)) {
