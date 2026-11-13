@@ -6,6 +6,7 @@ import {
 import type { AbilitySpec } from "../../pipeline/calculateAbility";
 import { resolvePoisonApplication, type PlayerPoisonProfile } from "../../poison/mechanics";
 import { isBasicAttack } from "../../shared/adrenalineGain";
+import { isOccultistsRingEquipped, occultistEligibleCast } from "../../shared/accessoryPassives";
 import type { ActiveEquipmentEffects } from "../../shared/equipment";
 import { deathdealerApplicationChance, hasPassive } from "../../shared/equipment";
 import { SCRIPTURE_OF_AMASCUT_PASSIVE_ID } from "../../passives/scriptureOfAmascut";
@@ -27,6 +28,8 @@ interface StatefulRngInput {
   readonly playerVitality?: PlayerVitalityInput;
   readonly playerMaximumLifePoints?: number;
   readonly equipmentEffects?: ActiveEquipmentEffects;
+  readonly equipmentIds?: readonly string[];
+  readonly equipmentSlots?: Readonly<Partial<Record<string, string | null>>>;
   readonly ammunition?: ResolvedRangedAmmunitionProfile | null;
   readonly abilities?: readonly AbilitySpec[];
   readonly abilityRegistry?: {
@@ -145,6 +148,12 @@ export function needsStochasticLanes(
   const abilityIds = [...activeAbilityIds];
   if ((input.adrenaline?.impatientRank ?? 0) > 0) return true;
   if ((input.adrenaline?.relentlessRank ?? 0) > 0) return true;
+  // The physically equipped Occultist ring introduces a cast-time RNG state
+  // transition even when ordinary damage/crit rolls would use one lane.
+  if (isOccultistsRingEquipped(input) && abilityIds.some(id => {
+    const ability = abilityForId(input, id);
+    return ability != null && occultistEligibleCast(ability);
+  })) return true;
   if (hasBlessing(input.league, "avernic-rampage")) return true;
   if (hasBlessing(input.league, "unholy-critual")) return true;
   // Cinders 5% needs the ensemble - rare single-lane samples starve analysis.
