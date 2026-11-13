@@ -62,5 +62,5 @@ jobs:
         run: npm run data:rebuild
       - name: TypeScript checks
         run: npx tsc --noEmit && npx tsc --noEmit -p tsconfig.tests.json
-      - name: Combat regression tests
-        run: npm run test:simulation
+      - name: Combat simulation and shared pipeline regression tests
+        run: npx vitest run src/combat/engine src/combat/pipeline
