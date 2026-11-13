@@ -22,6 +22,14 @@ describe("Occultist Infliction shared cast rule", () => {
     expect(isOccultistsRingEquipped({})).toBe(false);
     expect(isOccultistsRingEquipped({ equipmentSlots: { ring: "item:occultists-ring" } })).toBe(true);
     expect(isOccultistsRingEquipped({ equipmentIds: ["item:occultists-ring"] })).toBe(true);
+    expect(isOccultistsRingEquipped({
+      equipmentIds: ["item:occultists-ring"],
+      equipmentSlots: { ring: "item:ring-of-vigour" },
+    })).toBe(false);
+    expect(isOccultistsRingEquipped({
+      equipmentIds: ["item:occultists-ring"],
+      equipmentSlots: { ring: null },
+    })).toBe(false);
     expect(occultistEligibleCast(touch)).toBe(true);
     expect(occultistEligibleCast(finger)).toBe(true);
     expect(occultistEligibleCast(grasp)).toBe(true);
