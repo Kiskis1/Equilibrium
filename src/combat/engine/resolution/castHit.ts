@@ -21,6 +21,7 @@ import {
 } from "../../pipeline/modifierPipeline";
 import { applyDamagePotential } from "../../core/damagePotential";
 import { preciseMinHitAddition } from "../../shared/perks";
+import { eofReaperBonus, isEofEquipped, isEofReaperHitEligible } from "../../shared/eofPassives";
 import { TUSKAS_EMPOWERED_HIT_CAP } from "../../styles/shared/constitutionAbilities";
 import { bashRawDamageBand } from "../../styles/shared/defenceAbilities";
 import { FURY_CRIT_CHANCE_BONUS } from "../../styles/melee/effects";
@@ -751,8 +752,16 @@ function resolveCastHitUncached(
   const wenDamagePotentialDelta = snap.wenIcyPrecisionDamagePotentialAtCast
     ? WEN_ICY_PRECISION_DAMAGE_POTENTIAL_DELTA
     : 0;
+  // Reaper applies +0.1 percentage point hit chance per active successful
+  // personal hit. It is neither a damage multiplier nor an on-hit proc.
+  const reaperDamagePotentialDelta =
+    isEofEquipped(input) && isEofReaperHitEligible(provenance)
+      ? eofReaperBonus(state.accessories.reaper, at)
+      : 0;
   const effectiveAccuracy =
-    ammunition.damagePotentialDelta === 0 && wenDamagePotentialDelta === 0
+    ammunition.damagePotentialDelta === 0 &&
+    wenDamagePotentialDelta === 0 &&
+    reaperDamagePotentialDelta === 0
       ? targetDamagePotentialBeforeAmmunition
       : Math.max(
           0,
@@ -760,7 +769,8 @@ function resolveCastHitUncached(
             1,
             targetDamagePotentialBeforeAmmunition +
               ammunition.damagePotentialDelta +
-              wenDamagePotentialDelta,
+              wenDamagePotentialDelta +
+              reaperDamagePotentialDelta,
           ),
         );
   const accuracyWithBoltOverride = ammunition.accuracyOverride ?? effectiveAccuracy;

@@ -24,6 +24,7 @@ import { firstChargeReadyTick, maxChargesFor } from "./charges";
 import type { PoisonTier } from "../../poison/mechanics";
 import type { TimedTargetStatus } from "../../target/timedStatus";
 import type { BlackStoneArmourState } from "../../styles/ranged/blackStone";
+import { newEofReaperState, type EofReaperState } from "../../shared/eofPassives";
 import { inactiveRevengeState, type RevengeState } from "../../styles/shared/revenge";
 import {
   newScriptureOfAmascutState,
@@ -224,6 +225,10 @@ export interface RotationState {
    * this tick (wiki: 30s internal cooldown; 0 = ready). Style-agnostic.
    */
   relentlessUntilTick: number;
+  /** Equipment-state effects; absent from old source model snapshots only. */
+  accessories: {
+    reaper: EofReaperState;
+  };
   invention: {
     /** Crackling starts ready and triggers on the next eligible attack. */
     cracklingReadyTick: number;
@@ -276,6 +281,9 @@ export function newRotationState(
     cooldowns: {},
     charges: {},
     relentlessUntilTick: 0,
+    accessories: {
+      reaper: newEofReaperState(),
+    },
     invention: {
       cracklingReadyTick: 0,
       aftershockCharge: 0,
