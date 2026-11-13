@@ -136,7 +136,7 @@ Every damaging or state-changing event (`ScheduledEvent` in `engine/runtime/even
 
 - Gates are provenance kind + `capabilitiesOf`, not ability-id lists.
 - Blessing isolation is provenance kind `blessing` (`canTriggerProcs: false`, no on-hit gear). `blessingGenerated` remains only in `provenanceFromLegacy` migration; not on `CombatContext`.
-- Aftershock charge and Crackling eligibility follow `canTriggerProcs` (Aftershock blast still self-excludes by `abilityId`). Conjure auto/poison and equipment procs do not charge.
+- Crackling eligibility follows the family + `canTriggerProcs` gate. Aftershock charge also includes conjured spirit auto/poison damage even when those sources cannot trigger Crackling; Invention blasts and equipment procs never recursively charge. The shared `inventionRuntime.ts` transition accepts either a tagged statistical summary or a settled integer, and returns serializable state and proc descriptors.
 - `canApplyAbyssalParasite` is true only for `player_direct` / `player_auto`. Stack application is land-time (capabilities + melee + passive + damage).
 - Endless Assault converted channel hits use `player_converted_channel` (DoT-family gear gates; prayer/window mods + crit retained).
 
