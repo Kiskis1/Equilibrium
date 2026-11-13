@@ -159,6 +159,25 @@ describe("shared Invention runtime", () => {
     })).toThrow("finite");
   });
 
+  it("consumes a pending Aftershock at its landing tick when the target is lost", () => {
+    const pending = {
+      ...state(), aftershockCharge: 50_000, aftershockPending: true,
+      aftershockReadyTick: 17,
+    };
+    const completed = advanceInventionAfterLandedHit({
+      state: pending,
+      hit: hit(realized(0), {
+        tick: 17, targetId: "lost-glacyte", family: "proc",
+        abilityId: "aftershock", provenance: { kind: "invention_proc", detail: "aftershock" },
+      }),
+      ranks: { aftershockRank: 4 },
+    });
+    expect(completed.procs).toEqual([]);
+    expect(completed.state).toEqual({
+      ...pending, aftershockCharge: 0, aftershockPending: false, aftershockReadyTick: 27,
+    });
+  });
+
   it("uses one externally supplied RNG draw for Aftershock, none for Crackling", () => {
     expect(AFTERSHOCK_DAMAGE_STEPS).toBe(39);
     expect(inventionRawDamageAtStep("aftershock", 4, 1000, 0)).toBe(960);
