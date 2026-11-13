@@ -12,6 +12,7 @@ export * from "./core/hitCaps";
 export * from "./core/critical";
 export * from "./core/defence";
 export * from "./core/lifePoints";
+export * from "./core/realizedLifePoints";
 export * from "./core/playerVitality";
 export * from "./core/effectiveLevel";
 export * from "./core/abilityDamage";
