@@ -126,7 +126,10 @@ export function advanceInventionAfterLandedHit(args: {
     });
   }
 
-  if (aftershockRank === 0 || damage <= 0) return { state: next, procs };
+  if (aftershockRank === 0) return { state: next, procs };
+  // The scheduled blast consumes its charge even if its original target dies
+  // or all affected targets are immune. A host reports a zero-damage impact
+  // rather than leaving the pending flag stuck forever.
   if (hit.abilityId === "aftershock") {
     return {
       state: {
@@ -138,6 +141,7 @@ export function advanceInventionAfterLandedHit(args: {
       procs,
     };
   }
+  if (damage <= 0) return { state: next, procs };
   if (next.aftershockPending || !contributesAftershockCharge(hit.provenance, hit.abilityId)) {
     return { state: next, procs };
   }
