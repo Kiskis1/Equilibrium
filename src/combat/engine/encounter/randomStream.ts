@@ -11,7 +11,7 @@ export interface SerializableRandomStream {
 }
 
 export function seededXorshift32(seed: number): SerializableRandomStream {
-  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) {
+  if (!Number.isInteger(seed) || seed < -0x80000000 || seed > 0xffffffff) {
     throw new RangeError(`Invalid RNG seed: ${seed}`);
   }
   let state = seed >>> 0 || 0x9e3779b9;
