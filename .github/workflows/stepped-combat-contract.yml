@@ -23,6 +23,6 @@ jobs:
       - run: npm ci
       - run: npm run data:rebuild
       - name: Validate original and stepped cast state contracts
-        run: npx vitest run src/combat/engine/simulation/steppedContext.test.ts src/combat/engine/encounter/hostClock.test.ts src/combat/engine/encounter/hostCast.test.ts src/combat/engine/encounter/hostedAbilityEvents.test.ts
+        run: npx vitest run src/combat/engine/simulation/steppedContext.test.ts src/combat/engine/encounter/hostClock.test.ts src/combat/engine/encounter/hostCast.test.ts src/combat/engine/encounter/hostedAbilityEvents.test.ts src/combat/engine/encounter/hostEncounterTick.test.ts
       - name: Type-check combat API
         run: npx tsc --noEmit && npx tsc --noEmit -p tsconfig.tests.json
