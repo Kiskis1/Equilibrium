@@ -71,6 +71,8 @@ export type { ResolvedEvent } from "./engine/runtime/events";
 export { rotationOf } from "./engine/simulation/contracts";
 export { simulate } from "./engine/simulation/simulate";
 export { createSteppedCastContext, type SteppedCastContext, type SteppedCastResult } from "./engine/simulation/steppedContext";
+export { drainHostEvents, scheduleHostEvent, nextHostTick, type HostQueuedEvent } from "./engine/encounter/hostClock";
+export { seededXorshift32, type SerializableRandomStream } from "./engine/encounter/randomStream";
 export { simulateRevolution } from "./engine/simulation/revolution";
 
 export * from "./league/ruleset";
