@@ -201,3 +201,50 @@ export function planHostedChannelEvents(input: HostedChannelStart): HostedEventP
     },
   ];
 }
+
+export interface HostedSkullsHop {
+  tick: number;
+  previous: {
+    remaining: number;
+    rules: { range: number; edge_hop_ticks: number; hop_ticks: number };
+    [key: string]: unknown;
+  };
+  next: { target: string; destination: readonly [number, number] };
+  origin: readonly [number, number];
+  host: unknown;
+  travelDistance: number;
+}
+
+/** Pure Death Skulls follow-up hop; host decides the next eligible target. */
+export function planHostedSkullsHop(input: HostedSkullsHop): HostedEventPlan {
+  const { previous, next, tick } = input;
+  const rules = previous?.rules;
+  if (!Number.isSafeInteger(tick) || tick < 0 ||
+      !Number.isSafeInteger(previous?.remaining) || previous.remaining < 1 ||
+      !validTarget(next?.target) || !rules ||
+      !Number.isFinite(input.travelDistance) || input.travelDistance < 0 ||
+      !Number.isFinite(rules.range) || rules.range < 0 ||
+      !Number.isSafeInteger(rules.hop_ticks) || rules.hop_ticks < 1 ||
+      !Number.isSafeInteger(rules.edge_hop_ticks) || rules.edge_hop_ticks < 1 ||
+      ![input.origin, next.destination].every(point =>
+        Array.isArray(point) && point.length === 2 && point.every(Number.isFinite))) {
+    throw new RangeError("Invalid hosted Death Skulls hop");
+  }
+  const delay = input.travelDistance >= rules.range
+    ? rules.edge_hop_ticks
+    : rules.hop_ticks;
+  return {
+    tick: tick + delay,
+    type: "skulls",
+    // Preserve existing metadata including castId and inherited first-hit
+    // damage. No damage or critical RNG is rolled for a derived bounce.
+    data: {
+      ...previous,
+      ...next,
+      origin: input.origin,
+      host: input.host,
+      initial: false,
+      remaining: previous.remaining - 1,
+    },
+  };
+}
