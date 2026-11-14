@@ -6,7 +6,9 @@ import {
   scaleHostedBand, soulCrushHostedBand, deathSparkHostedBand,
   skeletonRageHostedBand, nexusHauntedBonus, bloodSiphonPulseNominal,
   bonesAdjustedArmourRating, hostedDamageMultiplier, hostedReflectReduction,
-  hostedMitigationDamage, hostedResonanceHealing,
+  hostedMitigationDamage, hostedResonanceHealing, hostedReductionFromTier,
+  hostedEquipmentReduction, hostedCombinedReduction, hostedPrayerRetainedMultiplier,
+  hostedResonanceFraction,
 } from "./hostedDamage";
 
 describe("pure hosted encounter damage", () => {
@@ -74,5 +76,17 @@ describe("remaining host-supplied pure damage calculations", () => {
       minimumDamage: 1,
     })).toBe(1000);
     expect(hostedResonanceHealing(300, 10, 10, 3, "floor")).toBe(120);
+  });
+});
+
+describe("shared incoming mitigation composition", () => {
+  it("keeps additive and multiplicative composition source-backed", () => {
+    expect(hostedReductionFromTier(90, 0.25)).toBe(0.225);
+    expect(hostedEquipmentReduction([0.1, 0.2], "sum")).toBeCloseTo(0.3);
+    expect(hostedEquipmentReduction([0.1, 0.2], "multiplicative")).toBeCloseTo(0.28);
+    expect(hostedCombinedReduction(0.2, 0.3, "additive")).toBe(0.5);
+    expect(hostedCombinedReduction(0.2, 0.3, "multiplicative")).toBeCloseTo(0.44);
+    expect(hostedPrayerRetainedMultiplier(0.5, 20)).toBe(0.3);
+    expect(hostedResonanceFraction(10, 10, 3)).toBe(0.4);
   });
 });

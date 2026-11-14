@@ -313,3 +313,51 @@ export function hostedResonanceHealing(
   if (mode === "round") return Math.round(damage * percent / 100);
   throw new RangeError("hostedDamage: invalid Resonance rounding");
 }
+
+
+/** Source-based incoming mitigation: only numerical composition is owned here. */
+export function hostedReductionFromTier(tier: number, percentPerTier: number): number {
+  finiteNonnegative(tier, "mitigation tier");
+  finiteNonnegative(percentPerTier, "mitigation percent per tier");
+  return Math.min(1, tier * percentPerTier / 100);
+}
+export function hostedEquipmentReduction(
+  reductions: readonly number[], stacking: "sum" | "multiplicative",
+): number {
+  for (const reduction of reductions) {
+    if (!Number.isFinite(reduction) || reduction < 0 || reduction > 1) {
+      throw new RangeError("hostedDamage: invalid equipment mitigation");
+    }
+  }
+  if (stacking === "sum") return Math.min(1, reductions.reduce((sum, x) => sum + x, 0));
+  if (stacking === "multiplicative") return 1 - reductions.reduce((part, x) => part * (1 - x), 1);
+  throw new RangeError("hostedDamage: invalid equipment stacking");
+}
+export function hostedCombinedReduction(
+  defenceReduction: number, equipmentReduction: number,
+  stacking: "additive" | "multiplicative",
+): number {
+  for (const x of [defenceReduction, equipmentReduction]) {
+    if (!Number.isFinite(x) || x < 0 || x > 1) throw new RangeError("hostedDamage: invalid reduction");
+  }
+  if (stacking === "additive") return Math.min(1, defenceReduction + equipmentReduction);
+  if (stacking === "multiplicative") return 1 - (1 - defenceReduction) * (1 - equipmentReduction);
+  throw new RangeError("hostedDamage: invalid defence stacking");
+}
+export function hostedPrayerRetainedMultiplier(
+  baseMultiplier: number, bonusPercentagePoints: number,
+): number {
+  if (!Number.isFinite(baseMultiplier) || baseMultiplier < 0 || baseMultiplier > 1 ||
+      !Number.isFinite(bonusPercentagePoints) || bonusPercentagePoints < 0) {
+    throw new RangeError("hostedDamage: invalid protection prayer modifier");
+  }
+  return Math.max(0, (baseMultiplier * 100 - bonusPercentagePoints) / 100);
+}
+export function hostedResonanceFraction(
+  shieldTier: number, basePercent: number, percentPerTier: number,
+): number {
+  finiteNonnegative(shieldTier, "resonance shield tier");
+  finiteNonnegative(basePercent, "resonance base percentage");
+  finiteNonnegative(percentPerTier, "resonance percentage per tier");
+  return Math.min(100, basePercent + percentPerTier * shieldTier) / 100;
+}
