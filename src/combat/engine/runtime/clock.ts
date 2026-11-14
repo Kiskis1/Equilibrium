@@ -176,11 +176,35 @@ function normalizeSongClocks(rt: SimulationRuntime, tick: number): void {
   }
 }
 
-export function advanceTo(rt: SimulationRuntime, targetTick: number): void {
+/**
+ * Resolve all events through the CURRENT tick without advancing the clock.
+ * Used by the opt-in tick driver before casting and after scheduling hits at
+ * that same tick. Damage/event ordering still belongs exclusively to this
+ * Equilibrium clock; encounter-side event rules are not duplicated here.
+ */
+export function settleCurrentTick(rt: SimulationRuntime): void {
+  const bound = rt.horizon === undefined
+    ? rt.state.tick
+    : Math.min(rt.state.tick, rt.horizon - 1);
+  processDueEvents(rt, bound);
+}
+
+/**
+ * By default the original clock includes events at targetTick. The stepped
+ * driver can defer only that boundary's events until the following tick.
+ * The default is deliberately unchanged for every existing simulation.
+ */
+export function advanceTo(
+  rt: SimulationRuntime,
+  targetTick: number,
+  options?: { deferTargetEvents?: boolean },
+): void {
   if (targetTick < rt.state.tick) return;
   const bounds = clockAdvanceBounds(targetTick, rt.horizon);
   // A horizon run never lands events at or after the horizon (half-open).
-  processDueEvents(rt, bounds.eventEndInclusive);
+  processDueEvents(rt, options?.deferTargetEvents
+    ? Math.min(bounds.eventEndInclusive, targetTick - 1)
+    : bounds.eventEndInclusive);
   grantMeteorPassive(rt, rt.state.tick, bounds.perTickEndExclusive);
   grantVestmentsPassive(rt, rt.state.tick, bounds.perTickEndExclusive);
   grantSongAdrenaline(rt, rt.state.tick, bounds.perTickEndExclusive);
