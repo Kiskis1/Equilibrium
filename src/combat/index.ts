@@ -74,6 +74,7 @@ export { createSteppedCastContext, type SteppedCastContext, type SteppedCastResu
 export { drainHostEvents, scheduleHostEvent, nextHostTick, type HostQueuedEvent } from "./engine/encounter/hostClock";
 export { seededXorshift32, type SerializableRandomStream } from "./engine/encounter/randomStream";
 export { planHostedCast, type HostedCastInput, type HostedCastPlan, type HostedCastSpec } from "./engine/encounter/hostCast";
+export { planHostedNecromancyImpacts, planHostedSkullsStart, planHostedChannelEvents, type HostedEventPlan, type HostedNecromancyImpactInput } from "./engine/encounter/hostedAbilityEvents";
 export { simulateRevolution } from "./engine/simulation/revolution";
 
 export * from "./league/ruleset";
