@@ -9,7 +9,7 @@ import {
 import { applyDamagePotential, damagePotential } from "../core/damagePotential";
 import { applyHitCap, normalizeHitCapRule, standardHitCap, type HitCapRule } from "../core/hitCaps";
 import { resolveHostDamageInstance } from "../core/hostDamage";
-import { mulFloor } from "../core/rounding";
+import { floorDamage, mulFloor } from "../core/rounding";
 import {
   contextWithProvenance,
   isTrueDotDamage,
@@ -156,6 +156,7 @@ function runPass(
   kits: HitPassKits,
   cap = true,
   criticalDamageMultiplier?: number | null,
+  hostRounding?: "rs3-host",
 ): number {
   // Pre-filtered + ordered once per pass kind; apply chain identical to runPipeline.
   const state = runOrderedPipeline(
@@ -164,13 +165,15 @@ function runPass(
     kits.context,
     true,
     criticalDamageMultiplier ?? undefined,
+    hostRounding,
   );
   const scaled = applyDamagePotential(state.damage, kits.accuracy);
   const inheritedCritFlat =
     criticalDamageMultiplier == null
       ? kits.postDamagePotentialCritFlat
       : mulFloor(kits.postDamagePotentialCritFlat, criticalDamageMultiplier);
-  const resolved = Math.floor(scaled) + kits.postDamagePotentialFlat + inheritedCritFlat;
+  const resolved = (hostRounding === "rs3-host" ? floorDamage(scaled) : Math.floor(scaled)) +
+    kits.postDamagePotentialFlat + inheritedCritFlat;
   return cap ? applyHitCap(resolved, kits.capRule) : resolved;
 }
 
@@ -513,6 +516,8 @@ export function calculateRawHitBand(input: RawHitBandInput): HitResult {
  */
 export interface RealizedHitInput extends HitInput {
   readonly random: () => number;
+  /** Opt-in legacy host numerical guard; generic Equilibrium floor stays unchanged. */
+  readonly hostRounding?: "rs3-host";
 }
 
 export interface RealizedHit {
@@ -560,8 +565,8 @@ export function sampleRealizedHit(input: RealizedHitInput): RealizedHit {
   );
   const mult = crit ? baseCritDamageMultiplier(input.level, input.crit.damageBonus ?? 0) : null;
   const active = activeFor(kits, mult);
-  const uncappedDamage = runPass(rawRoll, active, kits, false, mult);
-  const damage = runPass(rawRoll, active, kits, true, mult);
+  const uncappedDamage = runPass(rawRoll, active, kits, false, mult, input.hostRounding);
+  const damage = runPass(rawRoll, active, kits, true, mult, input.hostRounding);
   return {
     damage,
     uncappedDamage,

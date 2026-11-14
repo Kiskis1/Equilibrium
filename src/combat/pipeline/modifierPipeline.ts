@@ -1,5 +1,5 @@
 import { recordModifierProgramEvaluation, recordModifierSort } from "../profiling/hitPipeline";
-import { mulFloor } from "../core/rounding";
+import { floorDamage, mulFloor } from "../core/rounding";
 import type { CombatContext, CombatModifier, DamageState, ModifierStage } from "../types";
 
 /** Explicit stage order - the pipeline is deterministic, never one combined formula. */
@@ -33,6 +33,7 @@ export function runOrderedPipeline(
   context: CombatContext,
   preFiltered = false,
   criticalDamageMultiplier?: number,
+  criticalRounding?: "rs3-host",
 ): DamageState {
   const active = preFiltered
     ? orderedModifiers
@@ -48,13 +49,17 @@ export function runOrderedPipeline(
       (STAGE_ORDER.indexOf(m.stage) > STAGE_ORDER.indexOf("critical") ||
         (m.stage === "critical" && m.priority > 0))
     ) {
-      state = { damage: mulFloor(state.damage, criticalDamageMultiplier!) };
+      state = { damage: criticalRounding === "rs3-host"
+        ? floorDamage(state.damage * criticalDamageMultiplier!)
+        : mulFloor(state.damage, criticalDamageMultiplier!) };
       criticalDamageApplied = true;
     }
     state = m.apply(state, context);
   }
   if (hasCriticalDamage && !criticalDamageApplied) {
-    state = { damage: mulFloor(state.damage, criticalDamageMultiplier!) };
+    state = { damage: criticalRounding === "rs3-host"
+      ? floorDamage(state.damage * criticalDamageMultiplier!)
+      : mulFloor(state.damage, criticalDamageMultiplier!) };
   }
   return state;
 }

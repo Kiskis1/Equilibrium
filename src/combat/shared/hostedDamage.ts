@@ -113,7 +113,9 @@ export function resolveSoulSplitNominal(input: {
   let amount = 0;
   let previous = 0;
   for (const band of input.bands) {
-    const end = band.limit ?? input.damage;
+    // The open-ended band must remain valid when damage is below an earlier
+    // finite threshold (it contributes zero instead of inverting the range).
+    const end = band.limit ?? Math.max(previous, input.damage);
     finiteNonnegative(end, "Soul Split band end");
     finiteNonnegative(band.percent, "Soul Split band percent");
     if (end < previous) throw new RangeError("hostedDamage: unordered Soul Split bands");
