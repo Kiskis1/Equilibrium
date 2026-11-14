@@ -34,6 +34,13 @@ describe("pure hosted encounter damage", () => {
       targetHp: 500, targetHpCapFraction: 1, rounding: "floor",
     })).toBe(15);
     expect(resolveSplitSoulConvertedDamage(15, 2, 1, "floor")).toBe(30);
+    // High finite thresholds can exceed the entire hit; the open-ended band
+    // contributes zero and cannot reject a fully valid small hit.
+    expect(resolveSoulSplitNominal({
+      damage: 40, bands: [{ limit: 100, percent: 10 }, { limit: null, percent: 5 }],
+      multiplier: 1, secondaryMultiplier: 1, targetHp: 500,
+      targetHpCapFraction: 1, rounding: "floor",
+    })).toBe(4);
   });
   it("handles converted-channel DP and hit cap once", () => {
     expect(resolveBloodSiphonFinisher({

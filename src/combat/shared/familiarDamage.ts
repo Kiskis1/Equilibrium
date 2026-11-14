@@ -1,4 +1,4 @@
-import { mulFloor } from "../core/rounding";
+import { floorDamage, mulFloor } from "../core/rounding";
 import type { CombatModifier, SourceReference } from "../types";
 
 /**
@@ -22,6 +22,8 @@ export interface RipperDemonDamageInput {
   readonly targetLife: number;
   readonly targetMaxLife: number;
   readonly damageOverTime?: boolean;
+  /** Host-only numerical compatibility; generic Equilibrium remains floor-based. */
+  readonly hostRounding?: "rs3-host";
 }
 
 export function ripperDemonPassiveMultiplier(input: RipperDemonDamageInput): number {
@@ -48,6 +50,8 @@ export function ripperDemonPassiveModifier(input: RipperDemonDamageInput): Comba
     priority: 25,
     source: RIPPER_DEMON_PASSIVE_SOURCE,
     applies: () => true,
-    apply: state => ({ damage: mulFloor(state.damage, multiplier) }),
+    apply: state => ({ damage: input.hostRounding === "rs3-host"
+      ? floorDamage(state.damage * multiplier)
+      : mulFloor(state.damage, multiplier) }),
   };
 }
