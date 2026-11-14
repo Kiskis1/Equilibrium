@@ -1,0 +1,28 @@
+name: Stepped combat contract
+
+on:
+  pull_request:
+    paths:
+      - 'src/combat/engine/**'
+      - 'src/combat/index.ts'
+      - '.github/workflows/stepped-combat-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  stepped-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run data:rebuild
+      - name: Validate original and stepped cast state contracts
+        run: npx vitest run src/combat/engine/simulation/steppedContext.test.ts
+      - name: Type-check combat API
+        run: npx tsc --noEmit && npx tsc --noEmit -p tsconfig.tests.json
