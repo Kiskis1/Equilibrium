@@ -363,3 +363,45 @@ export function hostedResonanceFraction(
   finiteNonnegative(percentPerTier, "resonance percentage per tier");
   return Math.min(100, basePercent + percentPerTier * shieldTier) / 100;
 }
+
+
+/** Last host-consumed weapon and secondary-target damage bands.
+ * The numeric values come from the previously source-attributed RS3 ability
+ * records; this is their ONE canonical definition after the integration.
+ * Impact timing, targets and soul stacks remain owned by the encounter.
+ * These values have NOT been independently calibrated against live game traces.
+ */
+export const DEATH_ESSENCE_DAMAGE_BAND: Readonly<DamageBand> = Object.freeze({ minPct: 360, maxPct: 440 });
+export const SOUL_CRUSH_DAMAGE_BAND: Readonly<DamageBand> = Object.freeze({ minPct: 135, maxPct: 165 });
+export const SOUL_STRIKE_SECONDARY_DAMAGE_BAND: Readonly<DamageBand> = Object.freeze({ minPct: 90, maxPct: 110 });
+
+/** Source: RuneScape Wiki Death Mark, previously implemented by the Equilibrium
+ * engine/deathMark resolver. Reused by RS3 without invoking Equilibrium HP logic.
+ */
+export const DEATH_MARK_DURATION_TICKS = 1000;
+export const DEATH_MARK_EXECUTION_FRACTION = 0.2;
+export const DEATH_MARK_EXECUTION_THRESHOLD = 30000;
+export const DEATH_MARK_EXECUTION_DAMAGE = 100000;
+
+export function hostedDeathMarkThreshold(maxHp: number): number {
+  if (!Number.isSafeInteger(maxHp) || maxHp <= 0) throw new RangeError("Invalid Death Mark max HP");
+  return Math.min(maxHp * DEATH_MARK_EXECUTION_FRACTION, DEATH_MARK_EXECUTION_THRESHOLD);
+}
+export function hostedDeathMarkWindow(hp: number, maxHp: number): boolean {
+  if (!Number.isSafeInteger(hp) || hp < 0 || hp > maxHp) throw new RangeError("Invalid Death Mark HP");
+  return hp > 0 && hp < hostedDeathMarkThreshold(maxHp);
+}
+
+/** Nominal Life Transfer cost only; RS3 owns eligibility, HP and event timing. */
+export function lifeTransferSelfDamage(baseHp: number): number {
+  if (!Number.isSafeInteger(baseHp) || baseHp <= 0) throw new RangeError("Invalid Life Transfer base HP");
+  return floorDamage(baseHp / 2);
+}
+
+/** Unicorn heal arithmetic only; RS3 owns healing points and familiar commands. */
+export function unicornHealNominal(maxHp: number, healPercent: number): number {
+  if (!Number.isSafeInteger(maxHp) || maxHp <= 0) throw new RangeError("Invalid Unicorn maximum HP");
+  finiteNonnegative(healPercent, "Unicorn heal percentage");
+  if (healPercent > 100) throw new RangeError("Invalid Unicorn heal percentage");
+  return percentFloor(maxHp, healPercent);
+}

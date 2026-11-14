@@ -8,7 +8,10 @@ import {
   bonesAdjustedArmourRating, hostedDamageMultiplier, hostedReflectReduction,
   hostedMitigationDamage, hostedResonanceHealing, hostedReductionFromTier,
   hostedEquipmentReduction, hostedCombinedReduction, hostedPrayerRetainedMultiplier,
-  hostedResonanceFraction,
+  hostedResonanceFraction, DEATH_ESSENCE_DAMAGE_BAND, SOUL_CRUSH_DAMAGE_BAND,
+  SOUL_STRIKE_SECONDARY_DAMAGE_BAND, DEATH_MARK_EXECUTION_DAMAGE,
+  hostedDeathMarkThreshold, hostedDeathMarkWindow, lifeTransferSelfDamage,
+  unicornHealNominal,
 } from "./hostedDamage";
 
 describe("pure hosted encounter damage", () => {
@@ -95,5 +98,28 @@ describe("shared incoming mitigation composition", () => {
     expect(hostedCombinedReduction(0.2, 0.3, "multiplicative")).toBeCloseTo(0.44);
     expect(hostedPrayerRetainedMultiplier(0.5, 20)).toBe(0.3);
     expect(hostedResonanceFraction(10, 10, 3)).toBe(0.4);
+  });
+});
+
+describe("source-owned host combat constants and pure thresholds", () => {
+  it("provides all last locally duplicated offensive bands", () => {
+    expect(DEATH_ESSENCE_DAMAGE_BAND).toEqual({ minPct: 360, maxPct: 440 });
+    expect(SOUL_CRUSH_DAMAGE_BAND).toEqual({ minPct: 135, maxPct: 165 });
+    expect(SOUL_STRIKE_SECONDARY_DAMAGE_BAND).toEqual({ minPct: 90, maxPct: 110 });
+  });
+  it("uses the same Death Mark execution thresholds as the native engine", () => {
+    expect(DEATH_MARK_EXECUTION_DAMAGE).toBe(100000);
+    expect(hostedDeathMarkThreshold(370000)).toBe(30000);
+    expect(hostedDeathMarkThreshold(50000)).toBe(10000);
+    expect(hostedDeathMarkWindow(29999, 370000)).toBe(true);
+    expect(hostedDeathMarkWindow(30000, 370000)).toBe(false);
+    expect(hostedDeathMarkWindow(0, 370000)).toBe(false);
+    expect(() => hostedDeathMarkWindow(999, 998)).toThrow();
+  });
+  it("calculates source-bound Life Transfer and Unicorn amounts without HP changes", () => {
+    expect(lifeTransferSelfDamage(999)).toBe(499);
+    expect(lifeTransferSelfDamage(1000)).toBe(500);
+    expect(unicornHealNominal(1001, 10)).toBe(100);
+    expect(() => lifeTransferSelfDamage(-1)).toThrow();
   });
 });

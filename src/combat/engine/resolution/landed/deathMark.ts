@@ -12,13 +12,17 @@ import { NO_DAMAGE, type EventResolution, type ResolvedDamage } from "../types";
 import { scheduleEvent, type SimulationRuntime } from "../../runtime/runtime";
 import type { ScheduledEvent } from "../../runtime/events";
 import { patchTarget, type TargetVitalityState } from "../../runtime/state";
+import {
+  DEATH_MARK_DURATION_TICKS, DEATH_MARK_EXECUTION_DAMAGE,
+  hostedDeathMarkThreshold, hostedDeathMarkWindow,
+} from "../../../shared/hostedDamage";
+export {
+  DEATH_MARK_DURATION_TICKS, DEATH_MARK_EXECUTION_THRESHOLD,
+  DEATH_MARK_EXECUTION_FRACTION, DEATH_MARK_EXECUTION_DAMAGE,
+} from "../../../shared/hostedDamage";
 
 export const DEATH_MARK_STATUS_ID = "death-mark";
 export const DEATH_MARK_SOURCE_ID = "deathdealer";
-export const DEATH_MARK_DURATION_TICKS = 1_000;
-export const DEATH_MARK_EXECUTION_THRESHOLD = 30_000;
-export const DEATH_MARK_EXECUTION_FRACTION = 0.2;
-export const DEATH_MARK_EXECUTION_DAMAGE = 100_000;
 
 type DeathMarkEvent = ScheduledEvent<SimulationRuntime>;
 
@@ -186,17 +190,11 @@ function subtractTargetVitality(
 }
 
 export function deathMarkExecutionThreshold(vitality: TargetVitalityState): number {
-  return Math.min(
-    vitality.maximumLifePoints * DEATH_MARK_EXECUTION_FRACTION,
-    DEATH_MARK_EXECUTION_THRESHOLD,
-  );
+  return hostedDeathMarkThreshold(vitality.maximumLifePoints);
 }
 
 export function deathMarkExecutionWindow(vitality: TargetVitalityState): boolean {
-  return (
-    vitality.currentLifePoints > 0 &&
-    vitality.currentLifePoints < deathMarkExecutionThreshold(vitality)
-  );
+  return hostedDeathMarkWindow(vitality.currentLifePoints, vitality.maximumLifePoints);
 }
 
 export function applyDeathMarkLanded(
