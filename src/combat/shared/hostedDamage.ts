@@ -384,11 +384,11 @@ export const DEATH_MARK_EXECUTION_THRESHOLD = 30000;
 export const DEATH_MARK_EXECUTION_DAMAGE = 100000;
 
 export function hostedDeathMarkThreshold(maxHp: number): number {
-  if (!Number.isSafeInteger(maxHp) || maxHp <= 0) throw new RangeError("Invalid Death Mark max HP");
+  if (!Number.isFinite(maxHp) || maxHp <= 0) throw new RangeError("Invalid Death Mark max HP");
   return Math.min(maxHp * DEATH_MARK_EXECUTION_FRACTION, DEATH_MARK_EXECUTION_THRESHOLD);
 }
 export function hostedDeathMarkWindow(hp: number, maxHp: number): boolean {
-  if (!Number.isSafeInteger(hp) || hp < 0 || hp > maxHp) throw new RangeError("Invalid Death Mark HP");
+  if (!Number.isFinite(hp) || hp < 0) throw new RangeError("Invalid Death Mark HP");
   return hp > 0 && hp < hostedDeathMarkThreshold(maxHp);
 }
 

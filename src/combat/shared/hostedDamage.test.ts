@@ -114,7 +114,9 @@ describe("source-owned host combat constants and pure thresholds", () => {
     expect(hostedDeathMarkWindow(29999, 370000)).toBe(true);
     expect(hostedDeathMarkWindow(30000, 370000)).toBe(false);
     expect(hostedDeathMarkWindow(0, 370000)).toBe(false);
-    expect(() => hostedDeathMarkWindow(999, 998)).toThrow();
+    expect(hostedDeathMarkWindow(999, 998)).toBe(false);
+    expect(hostedDeathMarkWindow(29999.25, 370000)).toBe(true);
+    expect(() => hostedDeathMarkWindow(Number.NaN, 370000)).toThrow();
   });
   it("calculates source-bound Life Transfer and Unicorn amounts without HP changes", () => {
     expect(lifeTransferSelfDamage(999)).toBe(499);
