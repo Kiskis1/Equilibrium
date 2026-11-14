@@ -3,6 +3,10 @@ import {
   rollHostedRange, rollFamiliarAuto, rollFamiliarSpecial, resolveArisenDamage,
   resolveConjureBonus, resolveSoulSplitNominal, resolveSplitSoulConvertedDamage,
   resolveBloodSiphonFinisher, resolvePhantomPrevention,
+  scaleHostedBand, soulCrushHostedBand, deathSparkHostedBand,
+  skeletonRageHostedBand, nexusHauntedBonus, bloodSiphonPulseNominal,
+  bonesAdjustedArmourRating, hostedDamageMultiplier, hostedReflectReduction,
+  hostedMitigationDamage, hostedResonanceHealing,
 } from "./hostedDamage";
 
 describe("pure hosted encounter damage", () => {
@@ -37,5 +41,38 @@ describe("pure hosted encounter damage", () => {
   it("returns Phantom damage prevention only", () => {
     expect(resolvePhantomPrevention(1000, 400, true)).toBe(40);
     expect(resolvePhantomPrevention(1000, 400, false)).toBe(0);
+  });
+});
+
+describe("remaining host-supplied pure damage calculations", () => {
+  it("scales percentage bands before one subsequent hit roll", () => {
+    expect(scaleHostedBand({ minPct: 90, maxPct: 110 }, 1.5)).toEqual({ minPct: 135, maxPct: 165 });
+    expect(soulCrushHostedBand({ minPct: 135, maxPct: 165 }, 3)).toEqual({ minPct: 540, maxPct: 660 });
+    expect(deathSparkHostedBand({ minPct: 90, maxPct: 110 }, true)).toEqual({ minPct: 180, maxPct: 220 });
+    expect(skeletonRageHostedBand({ minPct: 22, maxPct: 28 }, 0)).toEqual({ minPct: 22, maxPct: 28 });
+    expect(() => soulCrushHostedBand({ minPct: 90, maxPct: 110 }, 6)).toThrow();
+  });
+  it("uses source-backed Haunted/Nexus and Blood Siphon nominal calculations", () => {
+    expect(nexusHauntedBonus(1000, 1000)).toBe(100);
+    expect(nexusHauntedBonus(1000, 1000, 20, 10)).toBe(100);
+    expect(bloodSiphonPulseNominal(1234, 25)).toBe(308);
+  });
+  it("calculates Bones defence rating and layered incoming reductions", () => {
+    expect(bonesAdjustedArmourRating({
+      baseRating: 1000, stacks: 3, reductionPercentPerStack: 0.2, rounding: "none",
+    })).toBe(994);
+    expect(hostedDamageMultiplier(100, 0.75)).toBe(75);
+    expect(hostedReflectReduction(100, 0.5)).toEqual({ damage: 50, prevented: 50 });
+    expect(hostedMitigationDamage({
+      damage: 1000, eligible: true, defenceReduction: 0.1, equipmentReduction: 0.2,
+      stacking: "multiplicative", roundingStage: "per_layer", rounding: "floor",
+      minimumDamage: 1,
+    })).toBe(720);
+    expect(hostedMitigationDamage({
+      damage: 1000, eligible: false, defenceReduction: 0.1, equipmentReduction: 0.2,
+      stacking: "multiplicative", roundingStage: "per_layer", rounding: "floor",
+      minimumDamage: 1,
+    })).toBe(1000);
+    expect(hostedResonanceHealing(300, 10, 10, 3, "floor")).toBe(120);
   });
 });
