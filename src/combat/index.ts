@@ -70,6 +70,7 @@ export type {
 export type { ResolvedEvent } from "./engine/runtime/events";
 export { rotationOf } from "./engine/simulation/contracts";
 export { simulate } from "./engine/simulation/simulate";
+export { createSteppedCastContext, type SteppedCastContext, type SteppedCastResult } from "./engine/simulation/steppedContext";
 export { simulateRevolution } from "./engine/simulation/revolution";
 
 export * from "./league/ruleset";
