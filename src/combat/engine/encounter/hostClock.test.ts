@@ -45,7 +45,7 @@ describe("host-facing deterministic encounter event clock", () => {
         return (state >>> 0) / 4294967296;
       };
     };
-    for (const seed of [0, 1, 73, 0xffffffff, 0x13579bdf]) {
+    for (const seed of [0, 1, 73, 0xffffffff, 0x13579bdf, -0x13579bdf, -0x80000000]) {
       const stream = seededXorshift32(seed);
       const legacy = old(seed);
       for (let i = 0; i < 100; i++) expect(stream()).toBe(legacy());
