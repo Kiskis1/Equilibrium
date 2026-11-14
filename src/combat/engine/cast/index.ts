@@ -105,23 +105,44 @@ export function prepareSimulationCast(
 }
 
 /**
- * Commit on one runtime; occupancy advances through the canonical clock.
+ * One cast split into an immediate start and a deferred completion. The same
+ * functions are used by the original cast API and the new tick-driven API:
+ * no duplicate cooldown, damage, resource or completion implementation.
  */
-export function commitCast(
+export interface StartedCast {
+  readonly prepared: PreparedCast;
+  readonly rng?: CastRng;
+  readonly record: CastRecord;
+  readonly completesAt: number;
+  readonly completed: boolean;
+  readonly tx: SimulationRuntime["lastCastAdrenalineTransaction"];
+}
+
+export function startPreparedCast(
   rt: SimulationRuntime,
   prepared: PreparedCast,
   auto: boolean,
   rng?: CastRng,
-): void {
+): StartedCast {
   const record = scheduleCastEvents(rt, prepared, auto);
   applyCastEffects(rt, prepared, rng);
   const tx = rt.lastCastAdrenalineTransaction;
   rt.lastCastAdrenalineTransaction = null;
   const completesAt = prepared.candidate + prepared.occupancyTicks;
   rt.endTick = Math.max(rt.endTick, completesAt);
-  const completed = rt.horizon == null || completesAt < rt.horizon;
-  advanceTo(rt, completesAt);
-  applyCompletionEffects(castEffectContext(rt, prepared, rng), completed);
+  return {
+    prepared, rng, record, completesAt,
+    completed: rt.horizon == null || completesAt < rt.horizon,
+    tx,
+  };
+}
+
+export function finishPreparedCast(rt: SimulationRuntime, started: StartedCast): void {
+  if (rt.state.tick < started.completesAt) {
+    throw new Error("Cannot complete a cast before its occupancy ends");
+  }
+  const { prepared, rng, record, tx } = started;
+  applyCompletionEffects(castEffectContext(rt, prepared, rng), started.completed);
   record.adrenalineAfter = rt.state.adrenaline;
 
   if (tx) {
@@ -164,9 +185,92 @@ export function commitCast(
   }
 }
 
+/** Existing rotation simulation remains an atomic full-occupancy cast. */
+export function commitCast(
+  rt: SimulationRuntime,
+  prepared: PreparedCast,
+  auto: boolean,
+  rng?: CastRng,
+): void {
+  const started = startPreparedCast(rt, prepared, auto, rng);
+  advanceTo(rt, started.completesAt);
+  finishPreparedCast(rt, started);
+}
+
+export type ReadyCastPreparation =
+  | { ok: true; prepared: PreparedCast; rng: CastRng }
+  | { ok: false; error: string };
+
 /**
- * One atomic cast on a single stochastic runtime.
+ * Prepare a legal cast at exactly rt.state.tick; NEVER skip cooldowns or GCD.
+ * The stepped scheduler is responsible for separately gating occupancy.
  */
+export function prepareCastNow(
+  rt: SimulationRuntime,
+  ability: AbilitySpec,
+  rng?: CastRng,
+): ReadyCastPreparation {
+  const { ability: castAbility } = resolveCastAbility(ability, {
+    byId: rt.byId,
+    weaponConfiguration: rt.input.weaponConfiguration,
+    equipmentIds: rt.input.equipmentIds,
+    passiveIds: rt.input.equipmentEffects?.passiveIds,
+    league: rt.input.league,
+    activeWeapon: rt.input.equipmentEffects?.activeWeapon,
+    eofStoredSpecialId: rt.input.eofStoredSpecialId,
+  });
+  const candidate = rt.state.tick;
+  const legalTick = firstLegalTickFor(rt.state, castAbility, rt.input.level);
+  if (legalTick > candidate) {
+    return { ok: false, error: `${castAbility.id} unavailable until tick ${legalTick}` };
+  }
+  const rejection = castRejection(
+    rt.state,
+    castAbility,
+    candidate,
+    rt.input.weaponConfiguration,
+    rt.input.equipmentIds,
+    rt.input.equipmentEffects?.passiveIds,
+    rt.byId,
+    rt.input.league,
+    rt.input.equipmentEffects?.activeWeapon,
+    rt.input.eofStoredSpecialId,
+  );
+  if (rejection) return { ok: false, error: rejection };
+
+  const songEmpowered = songEmpowermentForCast(rt, castAbility, candidate, rng);
+  const prepared =
+    castAbility.id === "icy_tempest"
+      ? (() => {
+          const resolved = resolveIcyTempest(
+            rt.state.melee.primordialIce,
+            candidate,
+            rt.state.ringOfVigour,
+          );
+          const index = rt.stochastic.weightedIndex(
+            "cast:icy-tempest-outcome",
+            resolved.outcomes.map((outcome) => outcome.probability),
+          );
+          return prepareCast(rt, castAbility, candidate, resolved.outcomes[index]!, songEmpowered);
+        })()
+      : prepareCast(rt, castAbility, candidate, undefined, songEmpowered);
+
+  const sampledRng: Record<string, boolean> = {};
+  for (const point of rngPointsFor(
+    rt.state,
+    prepared.working,
+    prepared.candidate,
+    prepared.spend,
+    rt.input.adrenaline,
+    rt.input.league,
+    rt.input.equipmentEffects,
+  )) {
+    sampledRng[point.id] = rt.stochastic.bernoulli(`cast:${point.id}`, point.chance);
+  }
+  return { ok: true, prepared, rng: rng ?? (sampledRng as CastRng) };
+}
+
+/** Original manual/Revolution cast driver; unchanged occupancy behavior. */
 export function performCast(
   rt: SimulationRuntime,
   ability: AbilitySpec,
@@ -188,50 +292,9 @@ export function performCast(
     firstLegalTickFor(rt.state, castAbility, rt.input.level),
   );
   advanceTo(rt, candidate);
-  const rejection = castRejection(
-    rt.state,
-    castAbility,
-    candidate,
-    rt.input.weaponConfiguration,
-    rt.input.equipmentIds,
-    rt.input.equipmentEffects?.passiveIds,
-    rt.byId,
-    rt.input.league,
-    rt.input.equipmentEffects?.activeWeapon,
-    rt.input.eofStoredSpecialId,
-  );
-  if (rejection) return { ok: false, error: rejection };
-
-  const songEmpowered = songEmpowermentForCast(rt, castAbility, candidate, rng);
-
-  const prepared =
-    castAbility.id === "icy_tempest"
-      ? (() => {
-          const resolved = resolveIcyTempest(
-            rt.state.melee.primordialIce,
-            candidate,
-            rt.state.ringOfVigour,
-          );
-          const index = rt.stochastic.weightedIndex(
-            "cast:icy-tempest-outcome",
-            resolved.outcomes.map((outcome) => outcome.probability),
-          );
-          return prepareCast(rt, castAbility, candidate, resolved.outcomes[index]!, songEmpowered);
-        })()
-      : prepareCast(rt, castAbility, candidate, undefined, songEmpowered);
-  const sampledRng: Record<string, boolean> = {};
-  for (const point of rngPointsFor(
-    rt.state,
-    prepared.working,
-    prepared.candidate,
-    prepared.spend,
-    rt.input.adrenaline,
-    rt.input.league,
-    rt.input.equipmentEffects,
-  )) {
-    sampledRng[point.id] = rt.stochastic.bernoulli(`cast:${point.id}`, point.chance);
-  }
-  commitCast(rt, prepared, auto, rng ?? (sampledRng as CastRng));
+  const attempt = prepareCastNow(rt, castAbility, rng);
+  if (!attempt.ok) return attempt;
+  commitCast(rt, attempt.prepared, auto, attempt.rng);
   return { ok: true };
 }
 
