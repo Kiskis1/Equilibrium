@@ -4,6 +4,7 @@ import {
   planHostedChannelEvents,
   planHostedNecromancyImpacts,
   planHostedSkullsStart,
+  planHostedSkullsHop,
 } from "./hostedAbilityEvents";
 
 const basicHit = { band: { minPct: 90, maxPct: 110 } };
@@ -115,6 +116,35 @@ describe("stateless Equilibrium hosted ability event plans", () => {
       { tick: 14, type: "channel", data: { channelId: 4, kind: "pulse" } },
       { tick: 16, type: "channel", data: { channelId: 4, kind: "finish" } },
     ]);
+  });
+
+  it("retains the sampled initial host hit when Death Skulls bounces", () => {
+    const previous = {
+      castId: 20, target: "boss", remaining: 2,
+      rules: { range: 6, hop_ticks: 2, edge_hop_ticks: 4 },
+      origin: [1, 2] as [number, number],
+      destination: [4, 5] as [number, number],
+      initial: true, host: { damage: 123, crit: true },
+      hit: basicHit,
+    };
+    const next = {
+      target: "@player", destination: [2, 2] as [number, number],
+    };
+    const result = planHostedSkullsHop({
+      tick: 10, previous, next,
+      origin: previous.destination, host: previous.host, travelDistance: 2,
+    });
+    expect(result.tick).toBe(12);
+    expect(result.type).toBe("skulls");
+    expect(result.data).toMatchObject({
+      castId: 20, target: "@player", initial: false, remaining: 1,
+      host: { damage: 123, crit: true },
+    });
+    const far = planHostedSkullsHop({
+      tick: 10, previous, next,
+      origin: previous.destination, host: previous.host, travelDistance: 6,
+    });
+    expect(far.tick).toBe(14);
   });
 
   it("does not mutate input or create RNG and fails closed on invalid plans", () => {
