@@ -7,6 +7,10 @@
  */
 import { applyHitCap } from "../core/hitCaps";
 import { floorDamage, percentFloor } from "../core/rounding";
+import type { DamageBand } from "../core/abilityDamage";
+import { DEATH_SPARK_DAMAGE_MULT } from "../styles/necromancy/deathSpark";
+import { skeletonRageMult } from "../styles/necromancy/conjures";
+import { hauntedBonusDamage, HAUNTED_BONUS_PCT, HAUNTED_CAP_PCT_OF_AD } from "../styles/necromancy/haunted";
 
 export type HostedRounding = "floor" | "round";
 
@@ -160,4 +164,200 @@ export function resolvePhantomPrevention(
   finiteNonnegative(incomingDamage, "Phantom incoming damage");
   finiteNonnegative(baseAbilityDamage, "Phantom base ability damage");
   return enabled ? floorDamage(Math.min(incomingDamage * 0.05, baseAbilityDamage * 0.1)) : 0;
+}
+
+/** Pure source-backed ability band transforms; host still owns souls and cast timing.
+ * Multiplication remains on the percentage band BEFORE the one integer hit roll.
+ */
+export function scaleHostedBand(band: DamageBand, multiplier: number): DamageBand {
+  finiteNonnegative(band.minPct, "band minimum");
+  finiteNonnegative(band.maxPct, "band maximum");
+  finiteNonnegative(multiplier, "band multiplier");
+  if (band.minPct > band.maxPct) throw new RangeError("hostedDamage: inverted damage band");
+  const minPct = band.minPct * multiplier;
+  const maxPct = band.maxPct * multiplier;
+  if (!Number.isFinite(minPct) || !Number.isFinite(maxPct)) {
+    throw new RangeError("hostedDamage: band multiplier overflow");
+  }
+  return { minPct, maxPct };
+}
+
+export function soulCrushHostedBand(band: DamageBand, residualSouls: number): DamageBand {
+  if (!Number.isSafeInteger(residualSouls) || residualSouls < 0 || residualSouls > 5) {
+    throw new RangeError("hostedDamage: invalid Soul Crush residual souls");
+  }
+  return scaleHostedBand(band, 1 + residualSouls);
+}
+
+export function deathSparkHostedBand(band: DamageBand, empowered: boolean): DamageBand {
+  if (typeof empowered !== "boolean") throw new TypeError("hostedDamage: invalid Death Spark state");
+  return scaleHostedBand(band, empowered ? DEATH_SPARK_DAMAGE_MULT : 1);
+}
+
+export function skeletonRageHostedBand(band: DamageBand, rageStacks: number): DamageBand {
+  return scaleHostedBand(band, skeletonRageMult(rageStacks));
+}
+
+/** Reuses the exact sourced Haunted floor/cap program, including the Nexus
+ * variant's floating-point order, rather than rebuilding the bonus in RS3. */
+export function nexusHauntedBonus(
+  parentDamage: number, capAbilityDamage: number,
+  bonusPercent: number = HAUNTED_BONUS_PCT,
+  capPercent: number = HAUNTED_CAP_PCT_OF_AD,
+): number {
+  finiteNonnegative(parentDamage, "Haunted host damage");
+  finiteNonnegative(capAbilityDamage, "Haunted cap ability damage");
+  finiteNonnegative(bonusPercent, "Haunted bonus percent");
+  finiteNonnegative(capPercent, "Haunted cap percent");
+  return hauntedBonusDamage(
+    parentDamage * bonusPercent / HAUNTED_BONUS_PCT,
+    capAbilityDamage * capPercent / HAUNTED_CAP_PCT_OF_AD,
+  );
+}
+
+/** Blood Siphon pulse: nominal healing only. Host decides actual LP gained. */
+export function bloodSiphonPulseNominal(damage: number, healingPercent: number): number {
+  finiteNonnegative(damage, "Blood Siphon damage");
+  finiteNonnegative(healingPercent, "Blood Siphon healing percent");
+  return percentFloor(damage, healingPercent);
+}
+
+export function bonesAdjustedArmourRating(args: {
+  readonly baseRating: number;
+  readonly stacks: number;
+  readonly reductionPercentPerStack: number;
+  readonly rounding: HostedRounding | "none";
+}): number {
+  const { baseRating, stacks, reductionPercentPerStack, rounding } = args;
+  finiteNonnegative(baseRating, "Bones armour");
+  finiteNonnegative(reductionPercentPerStack, "Bones per-stack percent");
+  if (!Number.isSafeInteger(stacks) || stacks < 0) {
+    throw new RangeError("hostedDamage: invalid Bones stack count");
+  }
+  const result = baseRating * (100 - stacks * reductionPercentPerStack) / 100;
+  if (!Number.isFinite(result) || result < 0) {
+    throw new RangeError("hostedDamage: invalid adjusted Bones rating");
+  }
+  return rounding === "none" ? result : rounded(result, rounding);
+}
+
+/** Pure incoming percentage modifiers; phase/eligibility and active buffs
+ * remain host decisions. Keep separate game rounding stages. */
+export function hostedDamageMultiplier(
+  damage: number, multiplier: number, mode: HostedRounding = "floor",
+): number {
+  finiteNonnegative(damage, "incoming damage");
+  finiteNonnegative(multiplier, "incoming multiplier");
+  return rounded(damage * multiplier, mode);
+}
+
+export function hostedReflectReduction(damage: number, retainedFraction: number): {
+  readonly damage: number; readonly prevented: number;
+} {
+  finiteNonnegative(damage, "Reflect incoming damage");
+  if (!Number.isFinite(retainedFraction) || retainedFraction < 0 || retainedFraction > 1) {
+    throw new RangeError("hostedDamage: invalid Reflect retained fraction");
+  }
+  const prevented = floorDamage(damage * (1 - retainedFraction));
+  return { damage: damage - prevented, prevented };
+}
+
+/** Preserve the host's exact defence/equipment multiplier order and floors.
+ * The host decides which layers are eligible, never the calculator. */
+export function hostedMitigationDamage(input: {
+  readonly damage: number;
+  readonly eligible: boolean;
+  readonly defenceReduction: number;
+  readonly equipmentReduction: number;
+  readonly stacking: "additive" | "multiplicative";
+  readonly roundingStage: "final" | "per_layer";
+  readonly rounding: HostedRounding;
+  readonly minimumDamage: number;
+}): number {
+  finiteNonnegative(input.damage, "mitigation incoming damage");
+  finiteNonnegative(input.minimumDamage, "mitigation minimum");
+  for (const v of [input.defenceReduction, input.equipmentReduction]) {
+    if (!Number.isFinite(v) || v < 0 || v > 1) {
+      throw new RangeError("hostedDamage: invalid mitigation reduction");
+    }
+  }
+  if (!input.eligible) return input.damage;
+  let remaining = input.damage;
+  if (input.stacking === "additive") {
+    remaining *= 1 - Math.min(1, input.defenceReduction + input.equipmentReduction);
+  } else if (input.stacking === "multiplicative") {
+    remaining *= 1 - input.equipmentReduction;
+    if (input.roundingStage === "per_layer") remaining = rounded(remaining, input.rounding);
+    else if (input.roundingStage !== "final") throw new RangeError("hostedDamage: invalid mitigation stage");
+    remaining *= 1 - input.defenceReduction;
+  } else throw new RangeError("hostedDamage: invalid mitigation stacking");
+  remaining = rounded(remaining, input.rounding);
+  if (input.damage > 0) {
+    remaining = Math.max(Math.min(input.damage, input.minimumDamage), remaining);
+  }
+  return remaining;
+}
+
+export function hostedResonanceHealing(
+  damage: number, shieldTier: number, basePercent: number,
+  percentPerTier: number, mode: HostedRounding,
+): number {
+  finiteNonnegative(damage, "Resonance incoming damage");
+  finiteNonnegative(shieldTier, "Resonance shield tier");
+  finiteNonnegative(basePercent, "Resonance base percent");
+  finiteNonnegative(percentPerTier, "Resonance per-tier percent");
+  const percent = Math.min(100, basePercent + percentPerTier * shieldTier);
+  // Sourced Resonance's current game rule uses Math.floor (not the
+  // float-near-integer rounding guard) at this stage.
+  if (mode === "floor") return Math.floor(damage * percent / 100);
+  if (mode === "round") return Math.round(damage * percent / 100);
+  throw new RangeError("hostedDamage: invalid Resonance rounding");
+}
+
+
+/** Source-based incoming mitigation: only numerical composition is owned here. */
+export function hostedReductionFromTier(tier: number, percentPerTier: number): number {
+  finiteNonnegative(tier, "mitigation tier");
+  finiteNonnegative(percentPerTier, "mitigation percent per tier");
+  return Math.min(1, tier * percentPerTier / 100);
+}
+export function hostedEquipmentReduction(
+  reductions: readonly number[], stacking: "sum" | "multiplicative",
+): number {
+  for (const reduction of reductions) {
+    if (!Number.isFinite(reduction) || reduction < 0 || reduction > 1) {
+      throw new RangeError("hostedDamage: invalid equipment mitigation");
+    }
+  }
+  if (stacking === "sum") return Math.min(1, reductions.reduce((sum, x) => sum + x, 0));
+  if (stacking === "multiplicative") return 1 - reductions.reduce((part, x) => part * (1 - x), 1);
+  throw new RangeError("hostedDamage: invalid equipment stacking");
+}
+export function hostedCombinedReduction(
+  defenceReduction: number, equipmentReduction: number,
+  stacking: "additive" | "multiplicative",
+): number {
+  for (const x of [defenceReduction, equipmentReduction]) {
+    if (!Number.isFinite(x) || x < 0 || x > 1) throw new RangeError("hostedDamage: invalid reduction");
+  }
+  if (stacking === "additive") return Math.min(1, defenceReduction + equipmentReduction);
+  if (stacking === "multiplicative") return 1 - (1 - defenceReduction) * (1 - equipmentReduction);
+  throw new RangeError("hostedDamage: invalid defence stacking");
+}
+export function hostedPrayerRetainedMultiplier(
+  baseMultiplier: number, bonusPercentagePoints: number,
+): number {
+  if (!Number.isFinite(baseMultiplier) || baseMultiplier < 0 || baseMultiplier > 1 ||
+      !Number.isFinite(bonusPercentagePoints) || bonusPercentagePoints < 0) {
+    throw new RangeError("hostedDamage: invalid protection prayer modifier");
+  }
+  return Math.max(0, (baseMultiplier * 100 - bonusPercentagePoints) / 100);
+}
+export function hostedResonanceFraction(
+  shieldTier: number, basePercent: number, percentPerTier: number,
+): number {
+  finiteNonnegative(shieldTier, "resonance shield tier");
+  finiteNonnegative(basePercent, "resonance base percentage");
+  finiteNonnegative(percentPerTier, "resonance percentage per tier");
+  return Math.min(100, basePercent + percentPerTier * shieldTier) / 100;
 }
